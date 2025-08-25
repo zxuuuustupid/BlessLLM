@@ -1,0 +1,6 @@
+*.safetensors
+.idea
+*.msc
+*.mdl
+*.model
+*.json
