@@ -17,7 +17,6 @@ from xtuner.engine.hooks import (DatasetInfoHook, EvaluateChatHook,
                                  VarlenAttnArgsToMessageHubHook)
 from xtuner.engine.runner import TrainLoop
 from xtuner.model import SupervisedFinetune
-from xtuner.parallel.sequence import SequenceParallelSampler
 from xtuner.utils import PROMPT_TEMPLATE
 
 #######################################################################
@@ -33,13 +32,9 @@ prompt_template = PROMPT_TEMPLATE.internlm2_chat
 max_length = 2048
 pack_to_max_length = True
 
-# parallel
-sequence_parallel_size = 1
-
 # Scheduler & Optimizer
 batch_size = 1  # per_device
 accumulative_counts = 16
-accumulative_counts *= sequence_parallel_size
 dataloader_num_workers = 0
 max_epochs = 3
 optim_type = AdamW
@@ -50,19 +45,14 @@ max_norm = 1  # grad clip
 warmup_ratio = 0.03
 
 # Save
-save_steps = 500
-save_total_limit = 2  # Maximum checkpoints to keep (-1 means unlimited)
+save_steps = 50
+save_total_limit = 10  # Maximum checkpoints to keep (-1 means unlimited)
 
 # Evaluate the generation performance during the training
-# evaluation_freq = 500
-# SYSTEM = ''
-# evaluation_inputs = [
-#     '请给我介绍五个上海的景点', 'Please tell me five scenic spots in Shanghai'
-# ]
 evaluation_freq = 50
 SYSTEM = '你现在是一个送祝福大师，帮我针对不同人和事情、节日送对应的祝福'
 evaluation_inputs = [
-    '祝姐姐生日快乐', '祝妹妹谈判顺利','祝大家元宵节快乐'
+    '祝姐姐生日快乐','祝姐姐生日快乐，严肃风格','祝姐姐生日快乐,小红书风格', '祝妹妹谈判顺利，小红书风格','祝大家元宵节快乐','祝领导春节快乐，严肃风格'
 ]
 
 #######################################################################
@@ -107,7 +97,7 @@ train_dataset = dict(
     dataset=dict(type=load_dataset, path='json', data_files=dict(train=data_path)),
     tokenizer=tokenizer,
     max_length=max_length,
-    dataset_map_fn=oasst1_map_fn,
+    dataset_map_fn=None,
     template_map_fn=dict(
         type=template_map_fn_factory, template=prompt_template),
     remove_unused_columns=True,
@@ -115,13 +105,11 @@ train_dataset = dict(
     pack_to_max_length=pack_to_max_length,
     use_varlen_attn=use_varlen_attn)
 
-sampler = SequenceParallelSampler \
-    if sequence_parallel_size > 1 else DefaultSampler
 train_dataloader = dict(
     batch_size=batch_size,
     num_workers=dataloader_num_workers,
     dataset=train_dataset,
-    sampler=dict(type=sampler, shuffle=True),
+    sampler=dict(type=DefaultSampler, shuffle=True),
     collate_fn=dict(type=default_collate_fn, use_varlen_attn=use_varlen_attn))
 
 #######################################################################
@@ -165,13 +153,13 @@ train_cfg = dict(type=TrainLoop, max_epochs=max_epochs)
 # Log the dialogue periodically during the training process, optional
 custom_hooks = [
     dict(type=DatasetInfoHook, tokenizer=tokenizer),
-    dict(
-        type=EvaluateChatHook,
-        tokenizer=tokenizer,
-        every_n_iters=evaluation_freq,
-        evaluation_inputs=evaluation_inputs,
-        system=SYSTEM,
-        prompt_template=prompt_template)
+    # dict(
+    #     type=EvaluateChatHook,
+    #     tokenizer=tokenizer,
+    #     every_n_iters=evaluation_freq,
+    #     evaluation_inputs=evaluation_inputs,
+    #     system=SYSTEM,
+    #     prompt_template=prompt_template)
 ]
 
 if use_varlen_attn:
